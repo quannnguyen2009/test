@@ -1,0 +1,108 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{Plant Disease Classification Challenge}
+\author{Kaggle Competition}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Overview}
+
+In this competition, participants are tasked with building a machine learning model to classify plant leaf images into one of $K$ disease categories.
+Accurate classification is essential for early disease detection and agricultural sustainability.
+
+The dataset consists of labeled RGB images collected under real-world conditions, including variations in lighting, background, and leaf orientation.
+
+\section{Problem Statement}
+
+Given an image $x_i \in \mathbb{R}^{H \times W \times 3}$, predict its corresponding label
+\[
+y_i \in \{1, 2, \dots, K\}.
+\]
+
+Your model should learn a function
+\[
+f_\theta : \mathbb{R}^{H \times W \times 3} \rightarrow \Delta^{K-1},
+\]
+where $\Delta^{K-1}$ denotes the $(K-1)$-simplex representing a probability distribution over classes.
+
+\section{Evaluation Metric}
+
+Submissions are evaluated using \textbf{Categorical Cross-Entropy Loss}:
+
+\[
+\mathcal{L} = -\frac{1}{N} \sum_{i=1}^{N} \sum_{k=1}^{K}
+y_{i,k} \log \hat{p}_{i,k},
+\]
+
+where:
+\begin{itemize}
+    \item $N$ is the number of samples in the validation set,
+    \item $y_{i,k}$ is a one-hot encoded ground-truth label,
+    \item $\hat{p}_{i,k}$ is the predicted probability for class $k$.
+\end{itemize}
+
+Lower scores indicate better performance.
+
+\section{Data Description}
+
+The dataset is split into:
+\begin{itemize}
+    \item \textbf{Training set}: Labeled images used to train models.
+    \item \textbf{Test set}: Unlabeled images used for final evaluation.
+\end{itemize}
+
+Each image file name corresponds to a unique identifier used in the submission file.
+
+\section{Submission Format}
+
+Participants must submit a CSV file with the following format:
+
+\[
+\texttt{image\_id}, \hat{p}_1, \hat{p}_2, \dots, \hat{p}_K
+\]
+
+Each row must satisfy the probability constraint:
+\[
+\sum_{k=1}^{K} \hat{p}_k = 1.
+\]
+
+\section{Baseline Model}
+
+A simple baseline model minimizes empirical risk:
+
+\[
+\theta^{*} = \arg\min_{\theta} \;
+\mathbb{E}_{(x,y) \sim \mathcal{D}}
+\left[ \mathcal{L}(f_\theta(x), y) \right]
++ \lambda \|\theta\|_2^2,
+\]
+
+where $\lambda$ is an $L_2$ regularization coefficient.
+
+\section{Rules}
+
+\begin{itemize}
+    \item External data is \textbf{not allowed}.
+    \item Manual labeling of the test set is prohibited.
+    \item Final rankings are determined by performance on the private leaderboard.
+\end{itemize}
+
+\section{Getting Started}
+
+Check out the provided starter notebooks for:
+\begin{itemize}
+    \item Data loading and visualization
+    \item Baseline CNN and ViT models
+    \item Cross-validation and ensemble techniques
+\end{itemize}
+
+Good luck, and happy modeling! 🚀
+
+\end{document}

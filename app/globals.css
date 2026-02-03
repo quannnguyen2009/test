@@ -1,0 +1,28 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@config "../tailwind.config.ts";
+
+/* Fail-safe base styles */
+body {
+    background-color: #ffffff;
+    color: #000000;
+    font-family: var(--font-inter), sans-serif;
+    min-height: 100vh;
+}
+
+@layer base {
+    body {
+        @apply antialiased bg-white text-black;
+    }
+}
+
+/* Indicators */
+html::after {
+    content: "CSS LOADED";
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    font-size: 8px;
+    color: #ccc;
+    z-index: 9999;
+}

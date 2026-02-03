@@ -1,0 +1,56 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  password  String
+  createdAt DateTime @default(now())
+
+  competitions Competition[]
+  submissions  Submission[]
+}
+
+model Competition {
+  id               Int       @id @default(autoincrement())
+  title            String
+  subtitle         String?
+  metric           String
+  submissionLimit  Int       @default(5)
+  timeline         String?
+  startDate        DateTime?
+  endDate          DateTime?
+  
+  // File paths
+  descriptionPath  String?
+  dataDir          String?   // Folder containing public data files
+  dataDescPath     String?
+  groundTruthPath  String?   // Hidden from participants
+
+  hostId           Int
+  host             User      @relation(fields: [hostId], references: [id])
+
+  submissions      Submission[]
+  createdAt        DateTime  @default(now())
+}
+
+model Submission {
+  id            Int      @id @default(autoincrement())
+  score         Float
+  filePath      String
+  status        String   @default("pending") // pending, graded, error
+  createdAt     DateTime @default(now())
+
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+
+  competitionId Int
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+}
