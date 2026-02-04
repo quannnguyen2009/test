@@ -40,39 +40,31 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
 
                 <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Scoring Protocol</label>
-                        <select name="metric" defaultValue={initialData?.metric || "accuracy"}
-                            className="w-full bg-neutral-50 border-none p-4 rounded-2xl font-bold uppercase tracking-widest text-xs focus:ring-2 focus:ring-black transition-all outline-none appearance-none cursor-pointer">
-                            <optgroup label="Classification">
-                                <option value="accuracy">Accuracy</option>
-                                <option value="balanced_accuracy">Balanced Accuracy</option>
-                                <option value="f1_macro">F1 Score (Macro)</option>
-                                <option value="f1_micro">F1 Score (Micro)</option>
-                                <option value="f1_weighted">F1 Score (Weighted)</option>
-                                <option value="precision_macro">Precision (Macro)</option>
-                                <option value="precision_micro">Precision (Micro)</option>
-                                <option value="precision_weighted">Precision (Weighted)</option>
-                                <option value="recall_macro">Recall (Macro)</option>
-                                <option value="recall_micro">Recall (Micro)</option>
-                                <option value="recall_weighted">Recall (Weighted)</option>
-                                <option value="cohen_kappa">Cohen's Kappa</option>
-                                <option value="jaccard_macro">Jaccard Score (Macro)</option>
-                            </optgroup>
-                            <optgroup label="Regression">
-                                <option value="mae">MAE (Mean Absolute Error)</option>
-                                <option value="mse">MSE (Mean Squared Error)</option>
-                                <option value="rmse">RMSE (Root Mean Squared Error)</option>
-                                <option value="mape">MAPE (Mean Absolute Percentage Error)</option>
-                                <option value="r2">R2 Score (Coefficient of Determination)</option>
-                                <option value="median_absolute_error">Median Absolute Error</option>
-                                <option value="explained_variance">Explained Variance Score</option>
-                            </optgroup>
-                        </select>
-                    </div>
-                    <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Daily Submission Limit</label>
                         <input name="submission_limit" type="number" defaultValue={initialData?.submissionLimit || 5}
                             className="w-full bg-neutral-50 border-none p-4 rounded-2xl font-bold focus:ring-2 focus:ring-black transition-all outline-none" />
+                    </div>
+                    <div className="space-y-2 relative">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 flex items-center gap-1.5">
+                            Scoring Protocol <Asterisk size={10} className="text-black" />
+                        </label>
+                        <select name="metric" defaultValue={initialData?.metric || "accuracy"}
+                            className="w-full bg-neutral-50 border-none p-4 rounded-2xl font-bold uppercase tracking-widest text-[10px] focus:ring-2 focus:ring-black transition-all outline-none appearance-none cursor-pointer">
+                            <optgroup label="Classification" className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                                <option value="accuracy">Accuracy</option>
+                                <option value="f1">F1 Score</option>
+                                <option value="roc_auc">ROC AUC</option>
+                                <option value="cross_entropy">Cross Entropy</option>
+                            </optgroup>
+                            <optgroup label="Regression" className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                                <option value="mae">Mean Absolute Error (MAE)</option>
+                                <option value="mse">Mean Squared Error (MSE)</option>
+                                <option value="rmse">Root Mean Squared Error (RMSE)</option>
+                            </optgroup>
+                        </select>
+                        <div className="absolute right-4 bottom-4 pointer-events-none text-neutral-400">
+                            <X size={12} className="rotate-45" />
+                        </div>
                     </div>
                 </div>
             </section>

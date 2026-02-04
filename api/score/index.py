@@ -1,29 +1,20 @@
-import sys
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pandas as pd
-import json
+import numpy as np
 from sklearn.metrics import (
     accuracy_score, f1_score, roc_auc_score, log_loss,
     mean_absolute_error, mean_squared_error
 )
-import numpy as np
-import os
 
-def calculate_score(sub_path, gt_path, metric):
+app = Flask(__name__)
+CORS(app)
+
+def calculate_score(sub_url, gt_url, metric):
     try:
-        # Load datasets
-        if sub_path.endswith('.csv'):
-            sub_df = pd.read_csv(sub_path)
-        elif sub_path.endswith('.json'):
-            sub_df = pd.read_json(sub_path)
-        else:
-            sub_df = pd.read_csv(sub_path)
-
-        if gt_path.endswith('.csv'):
-            gt_df = pd.read_csv(gt_path)
-        elif gt_path.endswith('.json'):
-            gt_df = pd.read_json(gt_path)
-        else:
-            gt_df = pd.read_csv(gt_path)
+        # pandas can read directly from URLs
+        sub_df = pd.read_csv(sub_url)
+        gt_df = pd.read_csv(gt_url)
 
         # Align on the first column (ID) and extract the target column(s)
         gt_df = gt_df.set_index(gt_df.columns[0])
@@ -50,7 +41,6 @@ def calculate_score(sub_path, gt_path, metric):
         elif m == 'rmse':
             score = np.sqrt(mean_squared_error(y_true, y_pred))
         else:
-            # Default to accuracy if unknown
             score = accuracy_score(y_true, y_pred)
             
         return {"score": float(round(score, 6))}
@@ -58,14 +48,22 @@ def calculate_score(sub_path, gt_path, metric):
     except Exception as e:
         return {"error": str(e)}
 
+@app.route('/api/score', methods=['POST'])
+def score():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    sub_url = data.get('sub_url')
+    gt_url = data.get('gt_url')
+    metric = data.get('metric', 'accuracy')
+
+    if not sub_url or not gt_url:
+        return jsonify({"error": "Missing sub_url or gt_url"}), 400
+
+    result = calculate_score(sub_url, gt_url, metric)
+    return jsonify(result)
+
+# Vercel requirements
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print(json.dumps({"error": "Missing arguments"}))
-        sys.exit(1)
-
-    sub = sys.argv[1]
-    gt = sys.argv[2]
-    met = sys.argv[3]
-
-    result = calculate_score(sub, gt, met)
-    print(json.dumps(result))
+    app.run()

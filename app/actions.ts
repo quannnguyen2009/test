@@ -65,9 +65,20 @@ export async function register(prevState: any, formData: FormData) {
 
 // --- Helpers ---
 
+import { put } from "@vercel/blob"
+
 async function saveFile(file: File, folder: string): Promise<string | null> {
     if (!file || file.size === 0 || file.name === "undefined") return null
 
+    // If Vercel Blob token is present, use it
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+        const { url } = await put(`${folder}/${file.name}`, file, {
+            access: 'public',
+        })
+        return url
+    }
+
+    // Fallback to local fs for development
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
@@ -77,8 +88,7 @@ async function saveFile(file: File, folder: string): Promise<string | null> {
     const filePath = path.join(uploadDir, file.name)
     fs.writeFileSync(filePath, buffer)
 
-    // Return API path
-    return `api/file/${folder}/${file.name}` // Relative path for API
+    return `api/file/${folder}/${file.name}`
 }
 
 // --- Competitions ---
@@ -95,7 +105,7 @@ export async function createCompetition(prevState: any, formData: FormData) {
     try {
         const title = formData.get("title") as string
         const subtitle = formData.get("subtitle") as string
-        const metric = formData.get("metric") as string
+        const metric = formData.get("metric") as string || "accuracy"
         const timeline = formData.get("timeline") as string
         const submissionLimit = parseInt(formData.get("submission_limit") as string || "5")
 
@@ -119,14 +129,7 @@ export async function createCompetition(prevState: any, formData: FormData) {
         const descFile = formData.get("description_file") as File
         if (descFile) {
             const saved = await saveFile(descFile, `competitions/${folderId}/description`)
-            if (saved) descPath = saved.replace("api/file/", "") // Store relative path? 
-            // In original Python: `media/competitions/...`
-            // Here saveFile returns `api/file/...` which is the URL.
-            // Let's store the URL-ready path or just relative.
-            // Python saved `media/...` and `getFileUrl` prepended API.
-            // Let's store `competitions/${folderId}/description/filename`
-            // and have a helper convert to API url.
-            if (saved) descPath = `competitions/${folderId}/description/${descFile.name}`
+            if (saved) descPath = saved
         }
 
         // Data Files (Multi)
@@ -141,13 +144,13 @@ export async function createCompetition(prevState: any, formData: FormData) {
         const dataDescFile = formData.get("data_desc_file") as File
         if (dataDescFile) {
             const saved = await saveFile(dataDescFile, `competitions/${folderId}/data_desc`)
-            if (saved) dataDescPath = `competitions/${folderId}/data_desc/${dataDescFile.name}`
+            if (saved) dataDescPath = saved
         }
 
         const gtFile = formData.get("ground_truth_file") as File
         if (gtFile) {
             const saved = await saveFile(gtFile, `competitions/${folderId}/hidden`) // Hidden folder
-            if (saved) gtPath = `competitions/${folderId}/hidden/${gtFile.name}`
+            if (saved) gtPath = saved
         }
 
         await prisma.competition.create({
@@ -209,17 +212,19 @@ export async function submitSubmission(cid: number, formData: FormData) {
         // Real Scoring
         let score = 0
         let status = "graded"
+        let errorMsg = ""
 
         if (comp.groundTruthPath) {
-            const calculated = await calculateScore(
+            const res = await calculateScore(
                 savedPath.replace("api/file/", ""),
                 comp.groundTruthPath,
                 comp.metric
             )
-            if (calculated !== null) {
-                score = calculated
+            if (res.score !== null) {
+                score = res.score
             } else {
                 status = "error"
+                errorMsg = res.error || "Scoring failed"
             }
         } else {
             status = "pending" // No ground truth to grade against yet
@@ -235,6 +240,7 @@ export async function submitSubmission(cid: number, formData: FormData) {
             }
         })
         revalidatePath(`/competition/${cid}`)
+        if (status === "error") return { message: errorMsg }
         return { message: "Success", score }
     } catch (e) {
         return { message: "Error submitting" }
@@ -254,7 +260,7 @@ export async function updateCompetition(id: number, prevState: any, formData: Fo
     try {
         const title = formData.get("title") as string
         const subtitle = formData.get("subtitle") as string
-        const metric = formData.get("metric") as string
+        const metric = formData.get("metric") as string || "accuracy"
         const timeline = formData.get("timeline") as string
         const submissionLimit = parseInt(formData.get("submission_limit") as string || "5")
         const startDateStr = formData.get("start_date") as string
@@ -273,28 +279,28 @@ export async function updateCompetition(id: number, prevState: any, formData: Fo
 
         // --- Removals ---
         const removeDesc = formData.get("remove_description_file")
-        if (removeDesc && descPath) {
+        if (removeDesc && descPath && !descPath.startsWith("http")) {
             const fullPath = path.join(process.cwd(), "uploads", descPath)
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
             descPath = null
         }
 
         const removeDataDesc = formData.get("remove_data_desc_file")
-        if (removeDataDesc && dataDescPath) {
+        if (removeDataDesc && dataDescPath && !dataDescPath.startsWith("http")) {
             const fullPath = path.join(process.cwd(), "uploads", dataDescPath)
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
             dataDescPath = null
         }
 
         const removeGT = formData.get("remove_ground_truth_file")
-        if (removeGT && gtPath) {
+        if (removeGT && gtPath && !gtPath.startsWith("http")) {
             const fullPath = path.join(process.cwd(), "uploads", gtPath)
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
             gtPath = null
         }
 
         const removedDataFiles = formData.getAll("remove_data_files") as string[]
-        if (removedDataFiles.length > 0 && dataDir) {
+        if (removedDataFiles.length > 0 && dataDir && !dataDir.startsWith("http")) {
             for (const filename of removedDataFiles) {
                 const fullPath = path.join(process.cwd(), "uploads", dataDir, filename)
                 if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
@@ -310,27 +316,33 @@ export async function updateCompetition(id: number, prevState: any, formData: Fo
         const descFile = formData.get("description_file") as File
         if (descFile && descFile.size > 0) {
             const saved = await saveFile(descFile, `competitions/${folderId}/description`)
-            if (saved) descPath = `competitions/${folderId}/description/${descFile.name}`
+            if (saved) descPath = saved
         }
 
         const dataFiles = formData.getAll("data_files") as File[]
         if (dataFiles.length > 0 && dataFiles[0] instanceof File && dataFiles[0].size > 0) {
             for (const f of dataFiles) {
-                if (f.size > 0) await saveFile(f, `competitions/${folderId}/data`)
+                if (f.size > 0) {
+                    const saved = await saveFile(f, `competitions/${folderId}/data`)
+                    if (saved && saved.startsWith("http")) {
+                        dataDir = `competitions/${folderId}/data` // Prefix for blob
+                    } else if (saved) {
+                        dataDir = `competitions/${folderId}/data` // Local folder
+                    }
+                }
             }
-            dataDir = `competitions/${folderId}/data`
         }
 
         const dataDescFile = formData.get("data_desc_file") as File
         if (dataDescFile && dataDescFile.size > 0) {
             const saved = await saveFile(dataDescFile, `competitions/${folderId}/data_desc`)
-            if (saved) dataDescPath = `competitions/${folderId}/data_desc/${dataDescFile.name}`
+            if (saved) dataDescPath = saved
         }
 
         const gtFile = formData.get("ground_truth_file") as File
         if (gtFile && gtFile.size > 0) {
             const saved = await saveFile(gtFile, `competitions/${folderId}/hidden`)
-            if (saved) gtPath = `competitions/${folderId}/hidden/${gtFile.name}`
+            if (saved) gtPath = saved
         }
 
         await prisma.competition.update({

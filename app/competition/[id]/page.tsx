@@ -1,8 +1,7 @@
 import prisma from "@/lib/prisma"
 import { getSession } from "@/lib/auth"
 import CompetitionDetail from "@/components/CompetitionDetail"
-import fs from "fs"
-import path from "path"
+import { readText, listFiles } from "@/lib/storage"
 
 export default async function CompetitionPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: idStr } = await params
@@ -17,32 +16,21 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
     if (!c) return <div className="p-10 text-center">Competition not found</div>
 
     // List files
-    let files: any[] = []
-    if (c.dataDir) {
-        // dataDir is relative? In actions we saved as `competitions/...`
-        // which matches `saveFile` location in `uploads/`
-        // Full path on disk:
-        const fullPath = path.join(process.cwd(), "uploads", c.dataDir)
-        if (fs.existsSync(fullPath)) {
-            const dirFiles = fs.readdirSync(fullPath)
-            files = dirFiles.map(f => ({ name: f }))
-        }
-    }
+    const files = await listFiles(c.dataDir || "")
 
-    // Leaderboard (Filter by duration and show top score per user)
+    // Determine sort order based on metric
+    const lowIsBetter = ["rmse", "mae", "mse", "cross_entropy"].includes(c.metric.toLowerCase())
+    const sortOrder = lowIsBetter ? "asc" : "desc"
+
+    // Leaderboard (Filter by status, show top score per user)
     const allSubmissions = await prisma.submission.findMany({
         where: {
             competitionId: id,
-            ...(c.startDate && c.endDate ? {
-                createdAt: {
-                    gte: c.startDate,
-                    lte: c.endDate
-                }
-            } : {})
+            status: "graded"
         },
-        orderBy: { score: (c.metric === "rmse" || c.metric === "mae") ? "asc" : "desc" },
+        orderBy: { score: sortOrder },
         include: { user: true },
-        take: 500
+        take: 1000
     })
 
     const topPerUser = new Map<number, any>()
@@ -62,22 +50,11 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
         })
     }
 
-    // Read file contents if they exist
-    let descriptionContent = null
-    if (c.descriptionPath) {
-        const fullPath = path.join(process.cwd(), "uploads", c.descriptionPath)
-        if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
-            descriptionContent = fs.readFileSync(fullPath, "utf-8")
-        }
-    }
-
-    let dataDescContent = null
-    if (c.dataDescPath) {
-        const fullPath = path.join(process.cwd(), "uploads", c.dataDescPath)
-        if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
-            dataDescContent = fs.readFileSync(fullPath, "utf-8")
-        }
-    }
+    // Read file contents
+    const [descriptionContent, dataDescContent] = await Promise.all([
+        readText(c.descriptionPath || ""),
+        readText(c.dataDescPath || "")
+    ])
 
     return (
         <CompetitionDetail
