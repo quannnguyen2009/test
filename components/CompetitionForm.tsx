@@ -1,20 +1,113 @@
 "use client"
 
 import { useState, useRef, useActionState } from "react"
-import { Upload, X, Asterisk } from "lucide-react"
+import { Upload, X, Asterisk, Loader2 } from "lucide-react"
 import { createCompetition, updateCompetition } from "@/app/actions"
 import { formatToUTC7Input } from "@/lib/dateUtils"
+import { upload } from '@vercel/blob/client'
 
 export default function CompetitionForm({ initialData, existingDataFiles = [] }: { initialData?: any, existingDataFiles?: string[] }) {
     const isEdit = !!initialData
     const action = isEdit ? updateCompetition.bind(null, initialData.id) : createCompetition
     const [state, formAction] = useActionState(action, { message: "" })
+    const [uploading, setUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState("")
+
+    // Handle form submission with client-side uploads
+    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault()
+        setUploading(true)
+        setUploadProgress("Preparing files...")
+
+        const form = e.currentTarget
+        const formData = new FormData(form)
+
+        try {
+            // Upload files to Blob first
+            const folderId = `comp_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+
+            // Description file
+            const descFile = formData.get("description_file") as File
+            if (descFile && descFile.size > 0) {
+                setUploadProgress("Uploading description...")
+                const blob = await upload(descFile.name, descFile, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                })
+                formData.set("description_url", blob.url)
+            }
+
+            // Data description file
+            const dataDescFile = formData.get("data_desc_file") as File
+            if (dataDescFile && dataDescFile.size > 0) {
+                setUploadProgress("Uploading data description...")
+                const blob = await upload(dataDescFile.name, dataDescFile, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                })
+                formData.set("data_desc_url", blob.url)
+            }
+
+            // Ground truth file
+            const gtFile = formData.get("ground_truth_file") as File
+            if (gtFile && gtFile.size > 0) {
+                setUploadProgress("Uploading ground truth...")
+                const blob = await upload(gtFile.name, gtFile, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                })
+                formData.set("ground_truth_url", blob.url)
+            }
+
+            // Data files (multiple)
+            const dataFiles = formData.getAll("data_files") as File[]
+            const dataUrls: string[] = []
+            for (let i = 0; i < dataFiles.length; i++) {
+                const file = dataFiles[i]
+                if (file && file.size > 0) {
+                    setUploadProgress(`Uploading dataset ${i + 1}/${dataFiles.length}...`)
+                    const blob = await upload(file.name, file, {
+                        access: 'public',
+                        handleUploadUrl: '/api/upload',
+                    })
+                    dataUrls.push(blob.url)
+                }
+            }
+            if (dataUrls.length > 0) {
+                formData.set("data_urls", JSON.stringify(dataUrls))
+            }
+
+            setUploadProgress("Creating competition...")
+
+            // Remove file inputs (we've uploaded them already)
+            formData.delete("description_file")
+            formData.delete("data_desc_file")
+            formData.delete("ground_truth_file")
+            formData.delete("data_files")
+
+            // Submit to server action
+            await formAction(formData)
+        } catch (error) {
+            console.error("Upload error:", error)
+            setUploadProgress("Upload failed. Please try again.")
+        } finally {
+            setUploading(false)
+        }
+    }
+
 
     return (
-        <form action={formAction} className="space-y-12 max-w-3xl mx-auto pb-32">
+        <form onSubmit={handleSubmit} className="space-y-12 max-w-3xl mx-auto pb-32">
             {state?.message && (
                 <div className={`p-6 rounded-2xl border-2 font-bold text-xs uppercase tracking-widest ${state.message === "Success" ? "border-black bg-white text-black" : "border-red-100 bg-red-50 text-red-600"}`}>
                     {state.message}
+                </div>
+            )}
+
+            {uploading && (
+                <div className="p-6 rounded-2xl border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold text-xs uppercase tracking-widest flex items-center gap-3">
+                    <Loader2 className="animate-spin" size={16} />
+                    {uploadProgress}
                 </div>
             )}
 
@@ -111,8 +204,9 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
                 </div>
             </section>
 
-            <button type="submit" className="w-full py-6 bg-black text-white rounded-3xl font-black uppercase text-sm tracking-[0.4em] hover:bg-neutral-800 transition-all shadow-[0px_20px_40px_-10px_rgba(0,0,0,0.3)] hover:scale-[1.02] active:scale-95">
-                {isEdit ? "Synchronize Arena" : "Instantiate Arena"}
+            <button type="submit" disabled={uploading} className="w-full py-6 bg-black text-white rounded-3xl font-black uppercase text-sm tracking-[0.4em] hover:bg-neutral-800 transition-all shadow-[0px_20px_40px_-10px_rgba(0,0,0,0.3)] hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                {uploading && <Loader2 className="animate-spin" size={20} />}
+                {uploading ? "Uploading..." : (isEdit ? "Synchronize Arena" : "Instantiate Arena")}
             </button>
         </form>
     )

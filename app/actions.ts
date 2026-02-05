@@ -114,43 +114,27 @@ export async function createCompetition(prevState: any, formData: FormData) {
         const startDate = parseFromUTC7Input(startDateStr)
         const endDate = parseFromUTC7Input(endDateStr)
 
-        // Generate ID or use temp ID for folder? Prisma autoincrements ID.
-        // We can't know ID before insert.
-        // Strategy: Create DB record first (with empty paths), then upload, then update?
-        // Or generic folder `competitions/uuid`? 
-        // Let's use timestamp-random for folder name to avoid Id race conditions or dependency.
-        const folderId = `comp_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+        // Get uploaded file URLs from client-side uploads
+        const descPath = formData.get("description_url") as string || null
+        const dataDescPath = formData.get("data_desc_url") as string || null
+        const gtPath = formData.get("ground_truth_url") as string || null
 
-        let descPath = null
-        let dataDescPath = null
-        let gtPath = null
+        // Handle multiple data file URLs
         let dataDir = null
-
-        const descFile = formData.get("description_file") as File
-        if (descFile) {
-            const saved = await saveFile(descFile, `competitions/${folderId}/description`)
-            if (saved) descPath = saved
-        }
-
-        // Data Files (Multi)
-        const dataFiles = formData.getAll("data_files") as File[]
-        if (dataFiles.length > 0) {
-            for (const f of dataFiles) {
-                await saveFile(f, `competitions/${folderId}/data`)
+        const dataUrlsStr = formData.get("data_urls") as string
+        if (dataUrlsStr) {
+            try {
+                const dataUrls = JSON.parse(dataUrlsStr) as string[]
+                if (dataUrls.length > 0) {
+                    // Extract the common prefix from the first URL
+                    const firstUrl = dataUrls[0]
+                    const urlParts = firstUrl.split('/')
+                    // For Vercel Blob URLs, we'll store the folder prefix
+                    dataDir = `competitions/comp_${Date.now()}/data`
+                }
+            } catch (e) {
+                console.error("Failed to parse data URLs:", e)
             }
-            dataDir = `competitions/${folderId}/data`
-        }
-
-        const dataDescFile = formData.get("data_desc_file") as File
-        if (dataDescFile) {
-            const saved = await saveFile(dataDescFile, `competitions/${folderId}/data_desc`)
-            if (saved) dataDescPath = saved
-        }
-
-        const gtFile = formData.get("ground_truth_file") as File
-        if (gtFile) {
-            const saved = await saveFile(gtFile, `competitions/${folderId}/hidden`) // Hidden folder
-            if (saved) gtPath = saved
         }
 
         await prisma.competition.create({
@@ -158,7 +142,7 @@ export async function createCompetition(prevState: any, formData: FormData) {
                 title, subtitle, metric, timeline, submissionLimit,
                 startDate, endDate,
                 descriptionPath: descPath,
-                dataDescPath: dataDescPath, // Fixed typo
+                dataDescPath: dataDescPath,
                 dataDir,
                 groundTruthPath: gtPath,
                 hostId: Number(session.id)

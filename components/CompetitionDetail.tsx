@@ -114,7 +114,7 @@ export default function CompetitionDetail({
                         {tab === "overview" && (
                             <div className="prose max-w-none">
                                 <h2 className="text-2xl font-bold font-outfit mb-6 tracking-tight">Challenge Guidelines</h2>
-                                {descriptionContent ? (
+                                {descriptionContent && !c.descriptionPath?.toLowerCase().endsWith('.pdf') ? (
                                     <div className="bg-neutral-50 p-8 rounded-3xl border border-neutral-100 mb-8 font-medium text-neutral-600 leading-relaxed shadow-inner overflow-x-auto">
                                         <div className="markdown-content prose max-w-none prose-neutral prose-table:border prose-table:border-neutral-200 prose-th:px-4 prose-th:py-2 prose-td:px-4 prose-td:py-2">
                                             <ReactMarkdown
@@ -126,6 +126,15 @@ export default function CompetitionDetail({
                                         </div>
                                     </div>
                                 ) : null}
+                                {c.descriptionPath?.toLowerCase().endsWith('.pdf') && (
+                                    <div className="mb-8 rounded-3xl overflow-hidden border border-neutral-100 shadow-sm bg-neutral-50 h-[800px]">
+                                        <iframe
+                                            src={`/api/file/${c.descriptionPath}`}
+                                            className="w-full h-full border-none"
+                                            title="Challenge Documentation"
+                                        />
+                                    </div>
+                                )}
                                 {c.descriptionPath ? (
                                     <div className="flex flex-col gap-4">
                                         <p className="text-neutral-500 font-medium leading-relaxed">Refer to the documentation below for detailed rules and expectations.</p>
@@ -141,7 +150,7 @@ export default function CompetitionDetail({
                             <div className="space-y-12">
                                 <div>
                                     <h2 className="text-2xl font-bold font-outfit mb-6 tracking-tight">Dataset Description</h2>
-                                    {dataDescContent ? (
+                                    {dataDescContent && !c.dataDescPath?.toLowerCase().endsWith('.pdf') ? (
                                         <div className="bg-neutral-50 p-8 rounded-3xl border border-neutral-100 mb-8 font-medium text-neutral-600 leading-relaxed shadow-inner overflow-x-auto">
                                             <div className="markdown-content prose max-w-none prose-neutral prose-table:border prose-table:border-neutral-200 prose-th:px-4 prose-th:py-2 prose-td:px-4 prose-td:py-2">
                                                 <ReactMarkdown
@@ -153,6 +162,15 @@ export default function CompetitionDetail({
                                             </div>
                                         </div>
                                     ) : null}
+                                    {c.dataDescPath?.toLowerCase().endsWith('.pdf') && (
+                                        <div className="mb-8 rounded-3xl overflow-hidden border border-neutral-100 shadow-sm bg-neutral-50 h-[800px]">
+                                            <iframe
+                                                src={`/api/file/${c.dataDescPath}`}
+                                                className="w-full h-full border-none"
+                                                title="Dataset Documentation"
+                                            />
+                                        </div>
+                                    )}
                                     {c.dataDescPath ? ( // Fixed typo from dataDescriptionPath
                                         <a href={`/api/file/${c.dataDescPath}`} target="_blank" className="bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 flex items-center justify-between group hover:border-black transition-all font-bold text-xs uppercase tracking-widest">
                                             {c.dataDescPath.split('/').pop()}
