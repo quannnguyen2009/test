@@ -1,0 +1,15 @@
+# Exclude Python backend (hosted on Railway)
+api/
+requirements.txt
+Procfile
+
+# Exclude large local data and backups
+_legacy_backup/
+uploads/
+test_data/
+
+# Exclude local build artifacts and node_modules
+.next/
+node_modules/
+.env
+.DS_Store
