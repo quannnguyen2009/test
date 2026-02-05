@@ -36,8 +36,8 @@ export async function readText(filePath: string): Promise<string | null> {
 export async function listFiles(dirPath: string): Promise<{ name: string; url?: string }[]> {
     if (!dirPath) return []
 
-    if (dirPath.startsWith("http") || process.env.BLOB_READ_WRITE_TOKEN) {
-        // For Vercel Blob, we use prefixes. dirPath might be a folder name or a full URL prefix.
+    // If BLOB_READ_WRITE_TOKEN is set, prioritize Vercel Blob
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
         try {
             const { blobs } = await list({ prefix: dirPath })
             return blobs.map(b => ({

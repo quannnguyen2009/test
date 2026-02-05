@@ -15,11 +15,9 @@ export async function calculateScore(
             ? `https://${process.env.VERCEL_URL}`
             : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
 
-        // In Vercel, paths will be full URLs. In local, we need to convert local paths to URLs 
-        // that the API (running on the same host) can reach, or just pass URLs directly.
-        // For now, assume these are reachable URLs or absolute paths that the python API can handle if local.
+        const scoringUrl = process.env.SCORING_API_URL || baseUrl
 
-        const response = await fetch(`${baseUrl}/api/score`, {
+        const response = await fetch(`${scoringUrl}/api/score`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

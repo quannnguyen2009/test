@@ -41,6 +41,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
             return new NextResponse("Forbidden", { status: 403 })
         }
     }
+    // Vercel Blob Support
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+        const { list } = require("@vercel/blob")
+        const { blobs } = await list({ prefix: relativePath })
+        const blob = blobs.find((b: any) => b.pathname === relativePath || b.pathname.endsWith(relativePath))
+
+        if (blob) {
+            return NextResponse.redirect(blob.url)
+        }
+    }
+
     const fullPath = path.join(process.cwd(), "uploads", relativePath)
 
     if (!fs.existsSync(fullPath)) {
