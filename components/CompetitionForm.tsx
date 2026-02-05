@@ -1,83 +1,124 @@
 "use client"
 
-import { useState, useRef, useActionState } from "react"
+import { useState, useRef, useActionState, startTransition } from "react"
 import { Upload, X, Asterisk, Loader2 } from "lucide-react"
 import { createCompetition, updateCompetition } from "@/app/actions"
 import { formatToUTC7Input } from "@/lib/dateUtils"
 import { upload } from '@vercel/blob/client'
+import { compressFile, isTextFile } from "@/lib/compression"
+
 
 export default function CompetitionForm({ initialData, existingDataFiles = [] }: { initialData?: any, existingDataFiles?: string[] }) {
     const isEdit = !!initialData
     const action = isEdit ? updateCompetition.bind(null, initialData.id) : createCompetition
-    const [state, formAction] = useActionState(action, { message: "" })
+    const [state, formAction, isPending] = useActionState(action, { message: "" })
     const [uploading, setUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState("")
+    const [fileProgress, setFileProgress] = useState<Record<string, number>>({})
+
+    // Concurrency limiting helper
+    const limit = (concurrency: number) => {
+        let active = 0
+        const queue: (() => void)[] = []
+        return async <T,>(fn: () => Promise<T>): Promise<T> => {
+            if (active >= concurrency) await new Promise<void>(resolve => queue.push(resolve))
+            active++
+            try { return await fn() }
+            finally {
+                active--
+                queue.shift()?.()
+            }
+        }
+    }
+
+    const uploadLimit = limit(4)
+
+    // Calculate overall progress
+    const activeFiles = Object.keys(fileProgress)
+    const averageProgress = activeFiles.length > 0
+        ? Math.round((Object.values(fileProgress) as number[]).reduce((a, b) => a + b, 0) / activeFiles.length)
+        : 0
 
     // Handle form submission with client-side uploads
+
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault()
         setUploading(true)
-        setUploadProgress("Preparing files...")
+        setUploadProgress("Preparing transmission...")
+        setFileProgress({})
 
         const form = e.currentTarget
         const formData = new FormData(form)
 
         try {
-            // Upload files to Blob first
             const folderId = `comp_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+            const uploadTasks: Promise<any>[] = []
+
+            const uploadFile = async (file: File, pathPrefix: string, onUrl: (url: string) => void) => {
+                if (!file || file.size === 0) return
+
+                let fileToUpload: File | Blob = file
+                const shouldCompress = isTextFile(file.name)
+
+
+                if (shouldCompress) {
+                    setUploadProgress(`Compressing ${file.name}...`)
+                    fileToUpload = await compressFile(file)
+                }
+
+                await uploadLimit(async () => {
+                    const blob = await upload(`competitions/${folderId}/${pathPrefix}/${(fileToUpload as File).name}`, fileToUpload, {
+                        access: 'public',
+                        handleUploadUrl: '/api/upload',
+                        onUploadProgress: (progress) => {
+                            setFileProgress(prev => ({
+                                ...prev,
+                                [file.name]: Math.round((progress.loaded / progress.total) * 100)
+                            }))
+                        }
+                    })
+                    onUrl(blob.url)
+                })
+            }
 
             // Description file
             const descFile = formData.get("description_file") as File
             if (descFile && descFile.size > 0) {
-                setUploadProgress("Uploading description...")
-                const blob = await upload(descFile.name, descFile, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                })
-                formData.set("description_url", blob.url)
+                uploadTasks.push(uploadFile(descFile, "description", (url) => formData.set("description_url", url)))
             }
 
             // Data description file
             const dataDescFile = formData.get("data_desc_file") as File
             if (dataDescFile && dataDescFile.size > 0) {
-                setUploadProgress("Uploading data description...")
-                const blob = await upload(dataDescFile.name, dataDescFile, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                })
-                formData.set("data_desc_url", blob.url)
+                uploadTasks.push(uploadFile(dataDescFile, "data_desc", (url) => formData.set("data_desc_url", url)))
             }
 
             // Ground truth file
             const gtFile = formData.get("ground_truth_file") as File
             if (gtFile && gtFile.size > 0) {
-                setUploadProgress("Uploading ground truth...")
-                const blob = await upload(gtFile.name, gtFile, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                })
-                formData.set("ground_truth_url", blob.url)
+                uploadTasks.push(uploadFile(gtFile, "hidden", (url) => formData.set("ground_truth_url", url)))
             }
 
             // Data files (multiple)
             const dataFiles = formData.getAll("data_files") as File[]
             const dataUrls: string[] = []
-            for (let i = 0; i < dataFiles.length; i++) {
-                const file = dataFiles[i]
+            dataFiles.forEach((file, i) => {
                 if (file && file.size > 0) {
-                    setUploadProgress(`Uploading dataset ${i + 1}/${dataFiles.length}...`)
-                    const blob = await upload(file.name, file, {
-                        access: 'public',
-                        handleUploadUrl: '/api/upload',
-                    })
-                    dataUrls.push(blob.url)
+                    uploadTasks.push(uploadFile(file, "data", (url) => {
+                        dataUrls[i] = url
+                    }))
                 }
-            }
-            if (dataUrls.length > 0) {
-                formData.set("data_urls", JSON.stringify(dataUrls))
+            })
+
+            setUploadProgress("Initiating parallel flux streams...")
+            await Promise.all(uploadTasks)
+
+            if (dataUrls.filter(Boolean).length > 0) {
+                formData.set("data_urls", JSON.stringify(dataUrls.filter(Boolean)))
             }
 
-            setUploadProgress("Creating competition...")
+            setUploadProgress("Finalizing arena...")
+            formData.set("folder_id", folderId)
 
             // Remove file inputs (we've uploaded them already)
             formData.delete("description_file")
@@ -86,7 +127,9 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
             formData.delete("data_files")
 
             // Submit to server action
-            await formAction(formData)
+            startTransition(() => {
+                formAction(formData)
+            })
         } catch (error) {
             console.error("Upload error:", error)
             setUploadProgress("Upload failed. Please try again.")
@@ -94,7 +137,6 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
             setUploading(false)
         }
     }
-
 
     return (
         <form onSubmit={handleSubmit} className="space-y-12 max-w-3xl mx-auto pb-32">
@@ -104,10 +146,42 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
                 </div>
             )}
 
-            {uploading && (
-                <div className="p-6 rounded-2xl border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold text-xs uppercase tracking-widest flex items-center gap-3">
-                    <Loader2 className="animate-spin" size={16} />
-                    {uploadProgress}
+            {(uploading || isPending) && (
+                <div className="p-8 rounded-3xl border-2 border-black bg-white shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-black flex items-center justify-center">
+                                <Loader2 className="animate-spin text-white" size={16} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">{uploadProgress || "Synchronizing..."}</p>
+                                <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
+                                    {isPending ? "Finalizing Transaction" : `${activeFiles.length} Flux Streams Active`}
+                                </p>
+                            </div>
+                        </div>
+                        {uploading && <span className="text-2xl font-black font-outfit">{averageProgress}%</span>}
+                    </div>
+
+                    {uploading && (
+                        <div className="space-y-4">
+                            <div className="h-4 bg-neutral-100 rounded-full overflow-hidden border border-neutral-200 p-0.5">
+                                <div
+                                    className="h-full bg-black rounded-full transition-all duration-500 ease-out"
+                                    style={{ width: `${averageProgress}%` }}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                {Object.entries(fileProgress).map(([name, progress]) => (
+                                    <div key={name} className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl border border-neutral-100">
+                                        <span className="text-[8px] font-black uppercase tracking-widest truncate max-w-[120px]">{name}</span>
+                                        <span className="text-[8px] font-black text-neutral-400">{progress}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -204,9 +278,9 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
                 </div>
             </section>
 
-            <button type="submit" disabled={uploading} className="w-full py-6 bg-black text-white rounded-3xl font-black uppercase text-sm tracking-[0.4em] hover:bg-neutral-800 transition-all shadow-[0px_20px_40px_-10px_rgba(0,0,0,0.3)] hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
-                {uploading && <Loader2 className="animate-spin" size={20} />}
-                {uploading ? "Uploading..." : (isEdit ? "Synchronize Arena" : "Instantiate Arena")}
+            <button type="submit" disabled={uploading || isPending} className="w-full py-6 bg-black text-white rounded-3xl font-black uppercase text-sm tracking-[0.4em] hover:bg-neutral-800 transition-all shadow-[0px_20px_40px_-10px_rgba(0,0,0,0.3)] hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                {(uploading || isPending) && <Loader2 className="animate-spin" size={20} />}
+                {(uploading || isPending) ? "Processing..." : (isEdit ? "Synchronize Arena" : "Instantiate Arena")}
             </button>
         </form>
     )

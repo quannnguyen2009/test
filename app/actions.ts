@@ -74,6 +74,7 @@ async function saveFile(file: File, folder: string): Promise<string | null> {
     if (process.env.BLOB_READ_WRITE_TOKEN) {
         const { url } = await put(`${folder}/${file.name}`, file, {
             access: 'public',
+            addRandomSuffix: true,
         })
         return url
     }
@@ -96,8 +97,6 @@ async function saveFile(file: File, folder: string): Promise<string | null> {
 export async function createCompetition(prevState: any, formData: FormData) {
     const sessionToken = (await cookies()).get("token")?.value
     if (!sessionToken) return { message: "Unauthorized" }
-    // Ideally verify session here, but for now trusting cookie presence + middleware/page protection
-    // To get user ID, we need to verify
     const { verify } = require("@/lib/auth")
     const session = await verify(sessionToken)
     if (!session) return { message: "Unauthorized" }
@@ -114,26 +113,63 @@ export async function createCompetition(prevState: any, formData: FormData) {
         const startDate = parseFromUTC7Input(startDateStr)
         const endDate = parseFromUTC7Input(endDateStr)
 
-        // Get uploaded file URLs from client-side uploads
-        const descPath = formData.get("description_url") as string || null
-        const dataDescPath = formData.get("data_desc_url") as string || null
-        const gtPath = formData.get("ground_truth_url") as string || null
+        const folderId = (formData.get("folder_id") as string) || `comp_${Date.now()}_${Math.floor(Math.random() * 1000)}`
 
-        // Handle multiple data file URLs
+        let descPath = null
+        let dataDescPath = null
+        let gtPath = null
         let dataDir = null
+
+        // Check if we have client-uploaded URLs (production) or need to process files (local)
+        const descUrl = formData.get("description_url") as string
+        const dataDescUrl = formData.get("data_desc_url") as string
+        const gtUrl = formData.get("ground_truth_url") as string
         const dataUrlsStr = formData.get("data_urls") as string
-        if (dataUrlsStr) {
-            try {
-                const dataUrls = JSON.parse(dataUrlsStr) as string[]
-                if (dataUrls.length > 0) {
-                    // Extract the common prefix from the first URL
-                    const firstUrl = dataUrls[0]
-                    const urlParts = firstUrl.split('/')
-                    // For Vercel Blob URLs, we'll store the folder prefix
-                    dataDir = `competitions/comp_${Date.now()}/data`
+
+        if (descUrl || dataDescUrl || gtUrl || dataUrlsStr) {
+            // Client-side upload (production with Blob)
+            descPath = descUrl || null
+            dataDescPath = dataDescUrl || null
+            gtPath = gtUrl || null
+
+            if (dataUrlsStr) {
+                try {
+                    const dataUrls = JSON.parse(dataUrlsStr) as string[]
+                    if (dataUrls.length > 0) {
+                        dataDir = `competitions/${folderId}/data`
+                    }
+                } catch (e) {
+                    console.error("Failed to parse data URLs:", e)
                 }
-            } catch (e) {
-                console.error("Failed to parse data URLs:", e)
+            }
+        } else {
+            // Server-side upload (local development)
+            const descFile = formData.get("description_file") as File
+            if (descFile && descFile.size > 0) {
+                const saved = await saveFile(descFile, `competitions/${folderId}/description`)
+                if (saved) descPath = saved
+            }
+
+            const dataFiles = formData.getAll("data_files") as File[]
+            if (dataFiles.length > 0 && dataFiles[0] instanceof File && dataFiles[0].size > 0) {
+                for (const f of dataFiles) {
+                    if (f.size > 0) {
+                        await saveFile(f, `competitions/${folderId}/data`)
+                    }
+                }
+                dataDir = `competitions/${folderId}/data`
+            }
+
+            const dataDescFile = formData.get("data_desc_file") as File
+            if (dataDescFile && dataDescFile.size > 0) {
+                const saved = await saveFile(dataDescFile, `competitions/${folderId}/data_desc`)
+                if (saved) dataDescPath = saved
+            }
+
+            const gtFile = formData.get("ground_truth_file") as File
+            if (gtFile && gtFile.size > 0) {
+                const saved = await saveFile(gtFile, `competitions/${folderId}/hidden`)
+                if (saved) gtPath = saved
             }
         }
 
@@ -254,12 +290,35 @@ export async function updateCompetition(id: number, prevState: any, formData: Fo
 
         // Determine folderId from existing paths or generate new one
         const samplePath = comp.dataDir || comp.descriptionPath || comp.dataDescPath || comp.groundTruthPath
-        const folderId = samplePath?.split('/')[1] || `comp_${Date.now()}`
+        const folderId = (formData.get("folder_id") as string) || samplePath?.split('/')[1] || `comp_${Date.now()}`
 
         let descPath = comp.descriptionPath
         let dataDescPath = comp.dataDescPath
         let gtPath = comp.groundTruthPath
         let dataDir = comp.dataDir
+
+        // Check if we have client-uploaded URLs (production) or need to process files (local)
+        const descUrl = formData.get("description_url") as string
+        const dataDescUrl = formData.get("data_desc_url") as string
+        const gtUrl = formData.get("ground_truth_url") as string
+        const dataUrlsStr = formData.get("data_urls") as string
+
+        if (descUrl || dataDescUrl || gtUrl || dataUrlsStr) {
+            if (descUrl) descPath = descUrl
+            if (dataDescUrl) dataDescPath = dataDescUrl
+            if (gtUrl) gtPath = gtUrl
+
+            if (dataUrlsStr) {
+                try {
+                    const dataUrls = JSON.parse(dataUrlsStr) as string[]
+                    if (dataUrls.length > 0) {
+                        dataDir = `competitions/${folderId}/data`
+                    }
+                } catch (e) {
+                    console.error("Failed to parse data URLs:", e)
+                }
+            }
+        }
 
         // --- Removals ---
         const removeDesc = formData.get("remove_description_file")

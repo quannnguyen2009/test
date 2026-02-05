@@ -11,19 +11,18 @@ import os
 def calculate_score(sub_path, gt_path, metric):
     try:
         # Load datasets
-        if sub_path.endswith('.csv'):
-            sub_df = pd.read_csv(sub_path)
-        elif sub_path.endswith('.json'):
-            sub_df = pd.read_json(sub_path)
-        else:
-            sub_df = pd.read_csv(sub_path)
+        # Load datasets
+        def load_df(path):
+            p = path.lower()
+            if p.endswith('.csv') or p.endswith('.csv.gz') or p.endswith('.gz'):
+                return pd.read_csv(path)
+            elif p.endswith('.json') or p.endswith('.json.gz'):
+                return pd.read_json(path)
+            return pd.read_csv(path)
 
-        if gt_path.endswith('.csv'):
-            gt_df = pd.read_csv(gt_path)
-        elif gt_path.endswith('.json'):
-            gt_df = pd.read_json(gt_path)
-        else:
-            gt_df = pd.read_csv(gt_path)
+        sub_df = load_df(sub_path)
+        gt_df = load_df(gt_path)
+
 
         # Align on the first column (ID) and extract the target column(s)
         gt_df = gt_df.set_index(gt_df.columns[0])

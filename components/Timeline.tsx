@@ -78,15 +78,15 @@ export default function Timeline({ start, end, variant = "light" }: { start: any
                 <div className="space-y-2">
                     <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${mutedColor}`}>Commencement</p>
                     <div className={`p-4 ${bgColor} rounded-2xl border ${borderColor} shadow-sm`}>
-                        <p className={`text-sm font-bold ${textColor}`}>{startDate.toLocaleDateString()}</p>
-                        <p className={`text-xs font-bold ${mutedColor} mt-1`}>{startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className={`text-sm font-bold ${textColor}`}>{now ? startDate.toLocaleDateString() : "..."}</p>
+                        <p className={`text-xs font-bold ${mutedColor} mt-1`}>{now ? startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "..."}</p>
                     </div>
                 </div>
                 <div className="space-y-2">
                     <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${mutedColor}`}>Termination</p>
                     <div className={`p-4 ${bgColor} rounded-2xl border ${borderColor} shadow-sm`}>
-                        <p className={`text-sm font-bold ${textColor}`}>{endDate.toLocaleDateString()}</p>
-                        <p className={`text-xs font-bold ${mutedColor} mt-1`}>{endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className={`text-sm font-bold ${textColor}`}>{now ? endDate.toLocaleDateString() : "..."}</p>
+                        <p className={`text-xs font-bold ${mutedColor} mt-1`}>{now ? endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "..."}</p>
                     </div>
                 </div>
             </div>

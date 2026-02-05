@@ -7,7 +7,9 @@ export async function readText(filePath: string): Promise<string | null> {
 
     if (filePath.startsWith("http")) {
         try {
-            const res = await fetch(filePath)
+            const res = await fetch(filePath, {
+                next: { revalidate: 60, tags: ['blob-content'] }
+            })
             if (!res.ok) return null
             return await res.text()
         } catch (e) {

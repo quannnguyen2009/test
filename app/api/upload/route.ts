@@ -8,13 +8,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const jsonResponse = await handleUpload({
             body,
             request,
-            onBeforeGenerateToken: async (pathname) => {
-                // Add authentication check here if needed
+            onBeforeGenerateToken: async (pathname, clientPayload) => {
+                // Optional: Add authentication check
+                // const session = await getSession()
+                // if (!session) throw new Error('Unauthorized')
+
                 return {
-                    allowedContentTypes: ['application/pdf', 'text/markdown', 'text/plain', 'application/zip', 'text/csv', 'application/json'],
-                    tokenPayload: JSON.stringify({
-                        // Optional metadata
-                    }),
+                    allowedContentTypes: [
+                        'application/pdf',
+                        'text/markdown',
+                        'text/plain',
+                        'application/zip',
+                        'text/csv',
+                        'application/json',
+                        'application/x-zip-compressed'
+                    ],
+                    maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB
+                    addRandomSuffix: true,
                 }
             },
             onUploadCompleted: async ({ blob, tokenPayload }) => {
@@ -24,6 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
         return NextResponse.json(jsonResponse)
     } catch (error) {
+        console.error('Upload API error:', error)
         return NextResponse.json(
             { error: (error as Error).message },
             { status: 400 }

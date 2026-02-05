@@ -1,15 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Trophy, Clock, User, Download, Upload, Trash2, ArrowLeft, ChevronRight, FileText, Database, BarChart3, ListChecks } from "lucide-react"
 import Timeline from "@/components/Timeline"
 import { submitSubmission, deleteCompetition } from "@/app/actions"
-import ReactMarkdown from "react-markdown"
-import remarkMath from "remark-math"
-import remarkGfm from "remark-gfm"
-import rehypeKatex from "rehype-katex"
-import "katex/dist/katex.min.css"
+import dynamic from "next/dynamic"
+import { compressFile, isTextFile } from "@/lib/compression"
+
+
+const MarkdownPreview = dynamic(() => import("./MarkdownPreview"), {
+    loading: () => (
+        <div className="animate-pulse space-y-4">
+            <div className="h-4 bg-neutral-100 rounded w-3/4"></div>
+            <div className="h-4 bg-neutral-100 rounded w-full"></div>
+            <div className="h-4 bg-neutral-100 rounded w-5/6"></div>
+        </div>
+    ),
+    ssr: true
+})
 
 export default function CompetitionDetail({
     competition: c,
@@ -24,27 +33,30 @@ export default function CompetitionDetail({
     const [uploading, setUploading] = useState(false)
     const [msg, setMsg] = useState("")
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const isHost = user && c.hostId === user.id
 
-    const normalizeMath = (content: string | null) => {
-        if (!content) return null
-        return content
-            .replace(/\\\[/g, () => "$$")
-            .replace(/\\\]/g, () => "$$")
-            .replace(/\\\(/g, () => "$")
-            .replace(/\\\)/g, () => "$")
-    }
 
-    const normalizedDescription = normalizeMath(descriptionContent)
-    const normalizedDataDesc = normalizeMath(dataDescContent)
 
     async function handleUpload(formData: FormData) {
         setUploading(true)
+        const file = formData.get("file") as File
+        if (file && isTextFile(file.name)) {
+            setMsg("Compressing for transmission...")
+            const compressed = await compressFile(file)
+            formData.set("file", compressed)
+        }
+        setMsg("Deploying to arena...")
         const res = await submitSubmission(c.id, formData)
         setUploading(false)
         if (res.message) setMsg(res.score ? `Score: ${res.score}` : res.message)
     }
+
 
     return (
         <div className="min-h-screen bg-white">
@@ -116,20 +128,13 @@ export default function CompetitionDetail({
                                 <h2 className="text-2xl font-bold font-outfit mb-6 tracking-tight">Challenge Guidelines</h2>
                                 {descriptionContent && !c.descriptionPath?.toLowerCase().endsWith('.pdf') ? (
                                     <div className="bg-neutral-50 p-8 rounded-3xl border border-neutral-100 mb-8 font-medium text-neutral-600 leading-relaxed shadow-inner overflow-x-auto">
-                                        <div className="markdown-content prose max-w-none prose-neutral prose-table:border prose-table:border-neutral-200 prose-th:px-4 prose-th:py-2 prose-td:px-4 prose-td:py-2">
-                                            <ReactMarkdown
-                                                remarkPlugins={[remarkMath, remarkGfm]}
-                                                rehypePlugins={[rehypeKatex]}
-                                            >
-                                                {normalizedDescription}
-                                            </ReactMarkdown>
-                                        </div>
+                                        <MarkdownPreview content={descriptionContent} />
                                     </div>
                                 ) : null}
                                 {c.descriptionPath?.toLowerCase().endsWith('.pdf') && (
                                     <div className="mb-8 rounded-3xl overflow-hidden border border-neutral-100 shadow-sm bg-neutral-50 h-[800px]">
                                         <iframe
-                                            src={`/api/file/${c.descriptionPath}`}
+                                            src={c.descriptionPath.startsWith('http') ? c.descriptionPath : `/api/file/${c.descriptionPath}`}
                                             className="w-full h-full border-none"
                                             title="Challenge Documentation"
                                         />
@@ -138,7 +143,7 @@ export default function CompetitionDetail({
                                 {c.descriptionPath ? (
                                     <div className="flex flex-col gap-4">
                                         <p className="text-neutral-500 font-medium leading-relaxed">Refer to the documentation below for detailed rules and expectations.</p>
-                                        <a href={`/api/file/${c.descriptionPath}`} target="_blank" className="inline-flex items-center gap-2 font-bold text-xs uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-neutral-600 transition-colors">
+                                        <a href={c.descriptionPath.startsWith('http') ? c.descriptionPath : `/api/file/${c.descriptionPath}`} target="_blank" className="inline-flex items-center gap-2 font-bold text-xs uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-neutral-600 transition-colors">
                                             <Download size={14} /> Documentation [{c.descriptionPath.split('/').pop()}]
                                         </a>
                                     </div>
@@ -152,27 +157,20 @@ export default function CompetitionDetail({
                                     <h2 className="text-2xl font-bold font-outfit mb-6 tracking-tight">Dataset Description</h2>
                                     {dataDescContent && !c.dataDescPath?.toLowerCase().endsWith('.pdf') ? (
                                         <div className="bg-neutral-50 p-8 rounded-3xl border border-neutral-100 mb-8 font-medium text-neutral-600 leading-relaxed shadow-inner overflow-x-auto">
-                                            <div className="markdown-content prose max-w-none prose-neutral prose-table:border prose-table:border-neutral-200 prose-th:px-4 prose-th:py-2 prose-td:px-4 prose-td:py-2">
-                                                <ReactMarkdown
-                                                    remarkPlugins={[remarkMath, remarkGfm]}
-                                                    rehypePlugins={[rehypeKatex]}
-                                                >
-                                                    {normalizedDataDesc}
-                                                </ReactMarkdown>
-                                            </div>
+                                            <MarkdownPreview content={dataDescContent} />
                                         </div>
                                     ) : null}
                                     {c.dataDescPath?.toLowerCase().endsWith('.pdf') && (
                                         <div className="mb-8 rounded-3xl overflow-hidden border border-neutral-100 shadow-sm bg-neutral-50 h-[800px]">
                                             <iframe
-                                                src={`/api/file/${c.dataDescPath}`}
+                                                src={c.dataDescPath.startsWith('http') ? c.dataDescPath : `/api/file/${c.dataDescPath}`}
                                                 className="w-full h-full border-none"
                                                 title="Dataset Documentation"
                                             />
                                         </div>
                                     )}
                                     {c.dataDescPath ? ( // Fixed typo from dataDescriptionPath
-                                        <a href={`/api/file/${c.dataDescPath}`} target="_blank" className="bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 flex items-center justify-between group hover:border-black transition-all font-bold text-xs uppercase tracking-widest">
+                                        <a href={c.dataDescPath.startsWith('http') ? c.dataDescPath : `/api/file/${c.dataDescPath}`} target="_blank" className="bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 flex items-center justify-between group hover:border-black transition-all font-bold text-xs uppercase tracking-widest">
                                             {c.dataDescPath.split('/').pop()}
                                             <Download size={16} className="text-neutral-300 group-hover:text-black transition-colors" />
                                         </a>
@@ -189,7 +187,7 @@ export default function CompetitionDetail({
                                                     </div>
                                                     <span className="text-xs font-bold truncate max-w-[150px]">{f.name}</span>
                                                 </div>
-                                                <a href={`/api/file/${c.dataDir}/${f.name}`} download className="p-2 text-neutral-300 hover:text-black transition-colors">
+                                                <a href={f.url || `/api/file/${c.dataDir}/${f.name}`} download className="p-2 text-neutral-300 hover:text-black transition-colors">
                                                     <Download size={16} />
                                                 </a>
                                             </div>
@@ -233,7 +231,9 @@ export default function CompetitionDetail({
                                                 <div className="text-xl font-black font-outfit">{s.score.toFixed(4)}</div>
                                             </div>
                                             <div className="w-px h-8 bg-neutral-100 mx-2" />
-                                            <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em]">{new Date(s.createdAt).toLocaleString()}</div>
+                                            <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em]">
+                                                {mounted ? new Date(s.createdAt).toLocaleString() : "..."}
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-50 border border-neutral-100">
