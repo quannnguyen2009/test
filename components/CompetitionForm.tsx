@@ -5,7 +5,7 @@ import { Upload, X, Asterisk } from "lucide-react"
 import { createCompetition, updateCompetition } from "@/app/actions"
 import { formatToUTC7Input } from "@/lib/dateUtils"
 
-export default function CompetitionForm({ initialData, existingDataFiles = [] }: { initialData?: any, existingDataFiles?: string[] }) {
+export default function CompetitionForm({ initialData, existingDataFiles = [] }: { initialData?: any, existingDataFiles?: { name: string, path: string }[] }) {
     const isEdit = !!initialData
     const action = isEdit ? updateCompetition.bind(null, initialData.id) : createCompetition
     const [state, formAction] = useActionState(action, { message: "" })
@@ -97,16 +97,16 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
                 </h2>
                 <div className="grid sm:grid-cols-2 gap-6">
                     <FileUpload label="Core Blueprint (PDF/MD)" name="description_file" accept=".pdf,.md,.txt"
-                        initialFiles={initialData?.descriptionPath ? [initialData.descriptionPath.split('/').pop()] : []} />
+                        initialFiles={initialData?.descriptionPath ? [{ name: initialData.descriptionPath.split('/').pop()!, path: initialData.descriptionPath }] : []} />
                     <FileUpload label="Schema Specs" name="data_desc_file" accept=".pdf,.md,.txt"
-                        initialFiles={initialData?.dataDescPath ? [initialData.dataDescPath.split('/').pop()] : []} />
+                        initialFiles={initialData?.dataDescPath ? [{ name: initialData.dataDescPath.split('/').pop()!, path: initialData.dataDescPath }] : []} />
                     <div className="sm:col-span-2">
                         <FileUpload label="Training Archives" name="data_files" accept=".zip,.csv,.json" multiple
                             initialFiles={existingDataFiles} />
                     </div>
                     <div className="sm:col-span-2">
                         <FileUpload label="Ground Truth (Classified)" name="ground_truth_file" accept=".csv,.json"
-                            initialFiles={initialData?.groundTruthPath ? ["ground_truth.csv"] : []} />
+                            initialFiles={initialData?.groundTruthPath ? [{ name: initialData.groundTruthPath.split('/').pop()!, path: initialData.groundTruthPath }] : []} />
                     </div>
                 </div>
             </section>
@@ -118,7 +118,7 @@ export default function CompetitionForm({ initialData, existingDataFiles = [] }:
     )
 }
 
-function FileUpload({ label, name, accept, multiple, initialFiles = [] }: any) {
+function FileUpload({ label, name, accept, multiple, initialFiles = [] }: { label: string, name: string, accept?: string, multiple?: boolean, initialFiles?: { name: string, path: string }[] }) {
     const [files, setFiles] = useState<File[]>([])
     const [removedFiles, setRemovedFiles] = useState<string[]>([])
     const inputRef = useRef<HTMLInputElement>(null)
@@ -139,7 +139,7 @@ function FileUpload({ label, name, accept, multiple, initialFiles = [] }: any) {
         setRemovedFiles(prev => [...prev, filename])
     }
 
-    const activeInitialFiles = initialFiles.filter((f: string) => !removedFiles.includes(f))
+    const activeInitialFiles = initialFiles.filter((f) => !removedFiles.includes(f.name))
 
     return (
         <div className="space-y-3 font-outfit">
@@ -162,25 +162,47 @@ function FileUpload({ label, name, accept, multiple, initialFiles = [] }: any) {
             </div>
 
             {(files.length > 0 || activeInitialFiles.length > 0) && (
-                <div className="flex flex-wrap gap-2 pt-2">
+                <div className="flex flex-col gap-2 pt-2">
                     {/* Existing Files */}
-                    {activeInitialFiles.map((f: string) => (
-                        <div key={f} className="flex items-center gap-2 bg-neutral-100 text-neutral-600 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border border-neutral-200">
-                            <span className="truncate max-w-[150px]">{f}</span>
-                            <button type="button" className="hover:text-red-500 transition-colors" title="Remove from arena"
-                                onClick={(e) => { e.stopPropagation(); removeExisting(f); }}>
-                                <X size={12} />
-                            </button>
+                    {activeInitialFiles.map((f) => (
+                        <div key={f.name} className="flex items-center justify-between gap-4 bg-neutral-100 text-neutral-600 px-6 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest border border-neutral-200">
+                            <span className="truncate flex-1">{f.name}</span>
+                            <div className="flex items-center gap-3">
+                                {f.path && (
+                                    <a
+                                        href={`/${f.path}?download=true`}
+                                        download={f.name}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="Download"
+                                        className="hover:text-black hover:scale-110 transition-all p-1"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <Upload className="rotate-180" size={14} />
+                                    </a>
+                                )}
+                                <button
+                                    type="button"
+                                    className="hover:text-red-500 hover:scale-110 transition-all p-1"
+                                    title="Remove from arena"
+                                    onClick={(e) => { e.stopPropagation(); removeExisting(f.name); }}
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
                         </div>
                     ))}
 
                     {/* New Files */}
                     {files.map((f, i) => (
-                        <div key={i} className="flex items-center gap-2 bg-black text-white px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg">
-                            <span className="truncate max-w-[150px]">{f.name}</span>
-                            <button type="button" className="hover:text-red-400 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); removeNew(i); }}>
-                                <X size={12} />
+                        <div key={i} className="flex items-center justify-between gap-4 bg-black text-white px-6 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-lg">
+                            <span className="truncate flex-1">{f.name}</span>
+                            <button
+                                type="button"
+                                className="hover:text-red-400 hover:scale-110 transition-all p-1 text-white/50 hover:text-white"
+                                onClick={(e) => { e.stopPropagation(); removeNew(i); }}
+                            >
+                                <X size={14} />
                             </button>
                         </div>
                     ))}

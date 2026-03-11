@@ -22,6 +22,7 @@ export default function CompetitionDetail({
 }: any) {
     const [tab, setTab] = useState("overview")
     const [uploading, setUploading] = useState(false)
+    const [uploadingFile, setUploadingFile] = useState<string | null>(null)
     const [msg, setMsg] = useState("")
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
@@ -40,10 +41,28 @@ export default function CompetitionDetail({
     const normalizedDataDesc = normalizeMath(dataDescContent)
 
     async function handleUpload(formData: FormData) {
+        const file = formData.get("file") as File
+        setUploadingFile(file?.name || "Processing...")
+        setTab("submissions")
         setUploading(true)
-        const res = await submitSubmission(c.id, formData)
-        setUploading(false)
-        if (res.message) setMsg(res.score ? `Score: ${res.score}` : res.message)
+        setMsg("")
+        
+        // Ensure user sees the submissions tab
+        setTimeout(() => {
+            const el = document.getElementById("submissions-list")
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+
+        try {
+            const res = await submitSubmission(c.id, formData)
+            if (res.message && res.message !== "Success") {
+                setMsg(res.message)
+            }
+        } finally {
+            setUploading(false)
+            setUploadingFile(null)
+            setSelectedFile(null)
+        }
     }
 
     return (
@@ -114,7 +133,15 @@ export default function CompetitionDetail({
                         {tab === "overview" && (
                             <div className="prose max-w-none">
                                 <h2 className="text-2xl font-bold font-outfit mb-6 tracking-tight">Challenge Guidelines</h2>
-                                {descriptionContent ? (
+                                {c.descriptionPath?.toLowerCase().endsWith('.pdf') ? (
+                                    <div className="bg-neutral-50 rounded-3xl border border-neutral-100 mb-8 overflow-hidden shadow-inner h-[800px]">
+                                        <iframe 
+                                            src={`/${c.descriptionPath}`} 
+                                            className="w-full h-full border-none"
+                                            title="Challenge Guidelines PDF"
+                                        />
+                                    </div>
+                                ) : descriptionContent ? (
                                     <div className="bg-neutral-50 p-8 rounded-3xl border border-neutral-100 mb-8 font-medium text-neutral-600 leading-relaxed shadow-inner overflow-x-auto">
                                         <div className="markdown-content prose max-w-none prose-neutral prose-table:border prose-table:border-neutral-200 prose-th:px-4 prose-th:py-2 prose-td:px-4 prose-td:py-2">
                                             <ReactMarkdown
@@ -128,10 +155,15 @@ export default function CompetitionDetail({
                                 ) : null}
                                 {c.descriptionPath ? (
                                     <div className="flex flex-col gap-4">
-                                        <p className="text-neutral-500 font-medium leading-relaxed">Refer to the documentation below for detailed rules and expectations.</p>
-                                        <a href={`/api/file/${c.descriptionPath}`} target="_blank" className="inline-flex items-center gap-2 font-bold text-xs uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-neutral-600 transition-colors">
-                                            <Download size={14} /> Documentation [{c.descriptionPath.split('/').pop()}]
-                                        </a>
+                                        <p className="text-neutral-500 font-medium leading-relaxed">Refer to the documentation for detailed rules and expectations.</p>
+                                        <div className="flex items-center gap-4">
+                                            <a href={`/${c.descriptionPath}?download=true`} target="_blank" className="inline-flex items-center gap-2 font-bold text-xs uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-neutral-600 transition-colors">
+                                                <Download size={14} /> Download Documentation [{c.descriptionPath.split('/').pop()}]
+                                            </a>
+                                            <a href={`/${c.descriptionPath}`} target="_blank" className="inline-flex items-center gap-2 font-bold text-xs uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-neutral-600 transition-colors">
+                                                <FileText size={14} /> View Original
+                                            </a>
+                                        </div>
                                     </div>
                                 ) : (!descriptionContent && <div className="p-12 border-2 border-dashed border-neutral-100 rounded-3xl text-center text-neutral-300 font-bold uppercase text-[10px] tracking-widest">Awaiting Guidelines</div>)}
                             </div>
@@ -141,7 +173,15 @@ export default function CompetitionDetail({
                             <div className="space-y-12">
                                 <div>
                                     <h2 className="text-2xl font-bold font-outfit mb-6 tracking-tight">Dataset Description</h2>
-                                    {dataDescContent ? (
+                                    {c.dataDescPath?.toLowerCase().endsWith('.pdf') ? (
+                                        <div className="bg-neutral-50 rounded-3xl border border-neutral-100 mb-8 overflow-hidden shadow-inner h-[800px]">
+                                            <iframe 
+                                                src={`/${c.dataDescPath}`} 
+                                                className="w-full h-full border-none"
+                                                title="Dataset Description PDF"
+                                            />
+                                        </div>
+                                    ) : dataDescContent ? (
                                         <div className="bg-neutral-50 p-8 rounded-3xl border border-neutral-100 mb-8 font-medium text-neutral-600 leading-relaxed shadow-inner overflow-x-auto">
                                             <div className="markdown-content prose max-w-none prose-neutral prose-table:border prose-table:border-neutral-200 prose-th:px-4 prose-th:py-2 prose-td:px-4 prose-td:py-2">
                                                 <ReactMarkdown
@@ -153,11 +193,15 @@ export default function CompetitionDetail({
                                             </div>
                                         </div>
                                     ) : null}
-                                    {c.dataDescPath ? ( // Fixed typo from dataDescriptionPath
-                                        <a href={`/api/file/${c.dataDescPath}`} target="_blank" className="bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 flex items-center justify-between group hover:border-black transition-all font-bold text-xs uppercase tracking-widest">
-                                            {c.dataDescPath.split('/').pop()}
-                                            <Download size={16} className="text-neutral-300 group-hover:text-black transition-colors" />
-                                        </a>
+                                    {c.dataDescPath ? (
+                                        <div className="flex items-center gap-4">
+                                            <a href={`/${c.dataDescPath}?download=true`} target="_blank" className="bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 flex items-center gap-4 group hover:border-black transition-all font-bold text-xs uppercase tracking-widest">
+                                                <Download size={16} className="text-neutral-300 group-hover:text-black transition-colors" /> {c.dataDescPath.split('/').pop()}
+                                            </a>
+                                            <a href={`/${c.dataDescPath}`} target="_blank" className="bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 flex items-center gap-4 group hover:border-black transition-all font-bold text-xs uppercase tracking-widest">
+                                                <FileText size={16} className="text-neutral-300 group-hover:text-black transition-colors" /> View Original
+                                            </a>
+                                        </div>
                                     ) : (!dataDescContent && <p className="text-neutral-400 font-medium">No extended description available.</p>)}
                                 </div>
                                 <div>
@@ -171,7 +215,7 @@ export default function CompetitionDetail({
                                                     </div>
                                                     <span className="text-xs font-bold truncate max-w-[150px]">{f.name}</span>
                                                 </div>
-                                                <a href={`/api/file/${c.dataDir}/${f.name}`} download className="p-2 text-neutral-300 hover:text-black transition-colors">
+                                                <a href={`/api/file/${c.dataDir}/${f.name}?download=true`} download className="p-2 text-neutral-300 hover:text-black transition-colors">
                                                     <Download size={16} />
                                                 </a>
                                             </div>
@@ -206,32 +250,65 @@ export default function CompetitionDetail({
                         )}
 
                         {tab === "submissions" && (
-                            <div className="space-y-4">
+                            <div className="space-y-4" id="submissions-list">
+                                {uploading && (
+                                    <div className="p-10 rounded-3xl border-2 border-black bg-neutral-50 flex flex-col items-center justify-center text-center gap-6 animate-in fade-in zoom-in-95 duration-500">
+                                        <div className="relative">
+                                            <div className="w-16 h-16 rounded-full border-4 border-neutral-200 border-t-black animate-spin" />
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <Upload size={20} className="text-black/20" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-black text-black/40 uppercase tracking-[0.4em] mb-2">Protocol Analysis In Progress</div>
+                                            <div className="text-2xl font-black font-outfit uppercase tracking-tighter mb-1">Scoring Submission</div>
+                                            <div className="text-xs font-bold text-neutral-400 italic truncate max-w-[300px] mx-auto opacity-60">"{uploadingFile}"</div>
+                                        </div>
+                                    </div>
+                                )}
                                 {mySubmissions.map((s: any) => (
-                                    <div key={s.id} className="p-6 rounded-2xl border border-neutral-100 hover:border-black transition-all flex justify-between items-center group bg-white shadow-sm hover:shadow-md">
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex flex-col">
-                                                <div className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">{c.metric} Score</div>
-                                                <div className="text-xl font-black font-outfit">{s.score.toFixed(4)}</div>
+                                    <div key={s.id} className={`p-6 rounded-2xl border transition-all flex flex-col gap-4 group bg-white shadow-sm hover:shadow-md ${s.status === 'error' ? 'border-red-100' : 'border-neutral-100 hover:border-black'}`}>
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex flex-col">
+                                                    <div className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">{c.metric} Score</div>
+                                                    <div className={`text-xl font-black font-outfit ${s.status === 'error' ? 'text-red-300' : ''}`}>
+                                                        {s.status === 'graded' ? s.score.toFixed(4) : s.status === 'error' ? '----' : '0.0000'}
+                                                    </div>
+                                                </div>
+                                                <div className="w-px h-8 bg-neutral-100 mx-2" />
+                                                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em]">{new Date(s.createdAt).toLocaleString()}</div>
                                             </div>
-                                            <div className="w-px h-8 bg-neutral-100 mx-2" />
-                                            <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em]">{new Date(s.createdAt).toLocaleString()}</div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-50 border border-neutral-100">
-                                                {s.status === "graded" && <div className="w-1.5 h-1.5 rounded-full bg-green-500" />}
-                                                {s.status === "pending" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />}
-                                                {s.status === "error" && <div className="w-1.5 h-1.5 rounded-full bg-red-500" />}
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{s.status}</span>
+                                            <div className="flex items-center gap-4">
+                                                <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${
+                                                    s.status === "graded" ? "bg-green-50 border-green-100" : 
+                                                    s.status === "error" ? "bg-red-50 border-red-100" : 
+                                                    "bg-neutral-50 border-neutral-100"
+                                                }`}>
+                                                    {s.status === "graded" && <div className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+                                                    {s.status === "pending" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />}
+                                                    {s.status === "error" && <div className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                                        s.status === "graded" ? "text-green-600" : 
+                                                        s.status === "error" ? "text-red-600" : 
+                                                        "text-neutral-500"
+                                                    }`}>{s.status}</span>
+                                                </div>
+                                                <a href={`/${s.filePath}?download=true`} download className="p-2.5 rounded-xl bg-neutral-50 text-neutral-400 hover:bg-black hover:text-white transition-all border border-neutral-100">
+                                                    <Download size={16} />
+                                                </a>
                                             </div>
-                                            <a href={`/${s.filePath}`} download className="p-2.5 rounded-xl bg-neutral-50 text-neutral-400 hover:bg-black hover:text-white transition-all border border-neutral-100">
-                                                <Download size={16} />
-                                            </a>
                                         </div>
+                                        {s.status === 'error' && s.errorMessage && (
+                                            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                                                <div className="text-[8px] font-black text-red-400 uppercase tracking-widest mb-1">Diagnostic Log</div>
+                                                <div className="text-[10px] font-mono font-medium text-red-700 leading-relaxed whitespace-pre-wrap">{s.errorMessage}</div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 {!user && <div className="p-20 text-center border-2 border-dashed border-neutral-100 rounded-3xl font-black uppercase text-[10px] tracking-widest text-neutral-300">Identity Verfication Required</div>}
-                                {user && mySubmissions.length === 0 && <div className="p-20 text-center border-2 border-dashed border-neutral-100 rounded-3xl font-black uppercase text-[10px] tracking-widest text-neutral-300">No Trials Found.</div>}
+                                {user && mySubmissions.length === 0 && !uploading && <div className="p-20 text-center border-2 border-dashed border-neutral-100 rounded-3xl font-black uppercase text-[10px] tracking-widest text-neutral-300">No Trials Found.</div>}
                             </div>
                         )}
                     </div>

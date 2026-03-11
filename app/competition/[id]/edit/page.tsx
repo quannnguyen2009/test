@@ -19,11 +19,14 @@ export default async function EditCompetitionPage({ params }: { params: Promise<
     if (!c) return <div className="p-10 text-center">Competition not found</div>
     if (c.hostId !== Number(user.id)) return <div className="p-10 text-center">Access denied</div>
 
-    let dataFiles: string[] = []
+    let dataFiles: { name: string, path: string }[] = []
     if (c.dataDir) {
         const fullPath = path.join(process.cwd(), "uploads", c.dataDir)
         if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isDirectory()) {
-            dataFiles = fs.readdirSync(fullPath)
+            dataFiles = fs.readdirSync(fullPath).map(f => ({
+                name: f,
+                path: `api/file/${c.dataDir}/${f}`
+            }))
         }
     }
 

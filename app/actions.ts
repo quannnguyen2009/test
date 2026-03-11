@@ -65,30 +65,27 @@ export async function register(prevState: any, formData: FormData) {
 
 // --- Helpers ---
 
-import { put } from "@vercel/blob"
+// Removal of @vercel/blob import for local storage implementation
 
 async function saveFile(file: File, folder: string): Promise<string | null> {
     if (!file || file.size === 0 || file.name === "undefined") return null
 
-    // If Vercel Blob token is present, use it
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-        const { url } = await put(`${folder}/${file.name}`, file, {
-            access: 'public',
-        })
-        return url
-    }
-
-    // Fallback to local fs for development
+    // Fallback to local fs for development (now the primary method)
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
     const uploadDir = path.join(process.cwd(), "uploads", folder)
     fs.mkdirSync(uploadDir, { recursive: true })
 
-    const filePath = path.join(uploadDir, file.name)
+    // Build a unique filename to prevent overwrites
+    const timestamp = Date.now()
+    const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase()
+    const uniqueName = `${timestamp}_${safeName}`
+
+    const filePath = path.join(uploadDir, uniqueName)
     fs.writeFileSync(filePath, buffer)
 
-    return `api/file/${folder}/${file.name}`
+    return `api/file/${folder}/${uniqueName}`
 }
 
 // --- Competitions ---
@@ -236,14 +233,16 @@ export async function submitSubmission(cid: number, formData: FormData) {
                 userId: Number(session.id),
                 filePath: savedPath,
                 score,
-                status
+                status,
+                errorMessage: errorMsg || null
             }
         })
         revalidatePath(`/competition/${cid}`)
         if (status === "error") return { message: errorMsg }
         return { message: "Success", score }
-    } catch (e) {
-        return { message: "Error submitting" }
+    } catch (e: any) {
+        console.error("Critical submission error:", e)
+        return { message: `Error submitting: ${e.message || "Unknown error"}` }
     }
 }
 
@@ -280,33 +279,37 @@ export async function updateCompetition(id: number, prevState: any, formData: Fo
         // --- Removals ---
         const removeDesc = formData.get("remove_description_file")
         if (removeDesc && descPath && !descPath.startsWith("http")) {
-            const fullPath = path.join(process.cwd(), "uploads", descPath)
-            if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
-            descPath = null
+             const relativePath = descPath.replace(/^api\/file\//, "")
+             const fullPath = path.join(process.cwd(), "uploads", relativePath)
+             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
+             descPath = null
         }
 
         const removeDataDesc = formData.get("remove_data_desc_file")
         if (removeDataDesc && dataDescPath && !dataDescPath.startsWith("http")) {
-            const fullPath = path.join(process.cwd(), "uploads", dataDescPath)
+            const relativePath = dataDescPath.replace(/^api\/file\//, "")
+            const fullPath = path.join(process.cwd(), "uploads", relativePath)
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
             dataDescPath = null
         }
 
         const removeGT = formData.get("remove_ground_truth_file")
         if (removeGT && gtPath && !gtPath.startsWith("http")) {
-            const fullPath = path.join(process.cwd(), "uploads", gtPath)
+            const relativePath = gtPath.replace(/^api\/file\//, "")
+            const fullPath = path.join(process.cwd(), "uploads", relativePath)
             if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
             gtPath = null
         }
 
         const removedDataFiles = formData.getAll("remove_data_files") as string[]
         if (removedDataFiles.length > 0 && dataDir && !dataDir.startsWith("http")) {
+            const relativeDataDir = dataDir.replace(/^api\/file\//, "")
             for (const filename of removedDataFiles) {
-                const fullPath = path.join(process.cwd(), "uploads", dataDir, filename)
+                const fullPath = path.join(process.cwd(), "uploads", relativeDataDir, filename)
                 if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
             }
             // Check if directory is empty
-            const dirFullPath = path.join(process.cwd(), "uploads", dataDir)
+            const dirFullPath = path.join(process.cwd(), "uploads", relativeDataDir)
             if (fs.existsSync(dirFullPath) && fs.readdirSync(dirFullPath).length === 0) {
                 dataDir = null
             }

@@ -1,10 +1,18 @@
 import fs from "fs"
 import path from "path"
-import { list } from "@vercel/blob"
+// Removed Vercel Blob list import for local storage implementation
 
 export async function readText(filePath: string): Promise<string | null> {
     if (!filePath) return null
 
+    // Skip non-text files
+    const ext = path.extname(filePath).toLowerCase()
+    const textExts = ['.txt', '.md', '.csv', '.json']
+    if (ext && !textExts.includes(ext) && !filePath.startsWith('http')) {
+        return null
+    }
+
+    // Local file storage is primary. If it's a full URL, attempt fetch, otherwise read from 'uploads'.
     if (filePath.startsWith("http")) {
         try {
             const res = await fetch(filePath)
@@ -16,9 +24,8 @@ export async function readText(filePath: string): Promise<string | null> {
         }
     }
 
-    // Local fallback
     try {
-        // If it starts with api/file/, strip it
+        // Normalize path: strip api/file/ prefix if present
         const relative = filePath.startsWith("api/file/")
             ? filePath.replace("api/file/", "")
             : filePath
@@ -36,24 +43,14 @@ export async function readText(filePath: string): Promise<string | null> {
 export async function listFiles(dirPath: string): Promise<{ name: string; url?: string }[]> {
     if (!dirPath) return []
 
-    if (dirPath.startsWith("http") || process.env.BLOB_READ_WRITE_TOKEN) {
-        // For Vercel Blob, we use prefixes. dirPath might be a folder name or a full URL prefix.
-        try {
-            const { blobs } = await list({ prefix: dirPath })
-            return blobs.map(b => ({
-                name: b.pathname.split("/").pop() || b.pathname,
-                url: b.url
-            }))
-        } catch (e) {
-            console.error("Error listing blobs:", e)
-        }
-    }
-
-    // Local fallback
+    // Local filesystem storage is now the primary method
     try {
         const fullPath = path.join(process.cwd(), "uploads", dirPath)
         if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isDirectory()) {
-            return fs.readdirSync(fullPath).map(f => ({ name: f }))
+            return fs.readdirSync(fullPath).map(f => ({ 
+                name: f,
+                url: `/api/file/${dirPath}/${f}`
+            }))
         }
     } catch (e) {
         console.error("Error listing local files:", e)

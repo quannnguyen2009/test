@@ -63,12 +63,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     else if (ext === ".txt") contentType = "text/plain"
     else if (ext === ".zip") contentType = "application/zip"
 
+    const isDownload = req.nextUrl.searchParams.get("download") === "true"
+    const filename = path.basename(fullPath)
+
     const fileBuffer = fs.readFileSync(fullPath)
 
     return new NextResponse(fileBuffer, {
         headers: {
             "Content-Type": contentType,
             "Content-Length": stat.size.toString(),
+            ...(isDownload ? { "Content-Disposition": `attachment; filename="${filename}"` } : {}),
         },
     })
 }
